@@ -1,0 +1,50 @@
+import { useMutation } from '@tanstack/react-query'
+import { authService } from '~/services'
+import type { RegisterDto, LoginDto, AuthResponse, ResendVerificationEmailDto, VerifyEmailDto } from '~/types'
+
+export function useRegister() {
+  return useMutation({
+    mutationFn: (data: RegisterDto) => authService.register(data),
+  })
+}
+
+export function useLogin() {
+  return useMutation({
+    mutationFn: async (data: LoginDto): Promise<AuthResponse> => {
+      // First, get the access token
+      const loginResponse = await authService.login(data)
+
+      // Store the token temporarily so the next request can it
+      localStorage.setItem('access_token', loginResponse.token)
+
+      // Then fetch the user data
+      const user = await authService.me()
+
+      // Return the combined response
+      return {
+        access_token: loginResponse.token,
+        user,
+      }
+    },
+    onSuccess: (data) => {
+      localStorage.setItem('access_token', data.access_token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+    },
+    onError(error, variables, onMutateResult, context) {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('user')
+    },
+  })
+}
+
+export function useVerifyEmail() {
+  return useMutation({
+    mutationFn: (data: VerifyEmailDto) => authService.verifyEmail(data),
+  })
+}
+
+export function useResendVerificationEmail() {
+  return useMutation({
+    mutationFn: (data: ResendVerificationEmailDto) => authService.resendVerificationEmail(data),
+  })
+}
