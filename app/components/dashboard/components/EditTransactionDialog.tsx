@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, use } from 'react'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -18,36 +19,69 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select'
-import { Plus, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import { Edit, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import { CreateCategoryDialog } from './CreateCategoryDialog'
-import { TypesTransactionCategory, type CreateTransactionDto } from '~/types'
-import { useCategories } from '~/hooks/use-finance'
-import { useCreateTransaction } from '~/hooks/use-finance'
+import { TypesTransactionCategory, type Transaction, type UpdateTransactionDto } from '~/types'
+import { useCategories, useUpdateTransaction, useCategory } from '~/hooks/use-finance'
+import { EditCategoryDialog } from './EditCategoryDialog'
 
-
-interface CreateTransactionDialogProps {
-  defaultType?: TypesTransactionCategory
-  accountId: string
+interface EditTransactionDialogProps {
+  transaction: Transaction
+  accountId: string,
+  button?: React.ReactNode
 }
 
-export function CreateTransactionDialog({
-    defaultType = TypesTransactionCategory.EXPENSE,
-    accountId,}: CreateTransactionDialogProps
-) {
-    if (!accountId) {
-      throw new Error('accountId is required to create a transaction')
-    }
+export function EditTransactionDialog({
+  transaction,
+  accountId,
+  button,
+}: EditTransactionDialogProps) {
+  if (!accountId) {
+    throw new Error('accountId is required to edit a transaction')
+  }
 
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
-  const [transactionType, setTransactionType] = useState<TypesTransactionCategory>(defaultType)
+  const [transactionType, setTransactionType] = useState<TypesTransactionCategory>(TypesTransactionCategory.EXPENSE)
   const [categoryId, setCategoryId] = useState('')
   const { data: categoriesData } = useCategories(accountId)
   const categories = categoriesData?.categories || []
-  const {mutate: createTransaction, isPending: isLoading} = useCreateTransaction(accountId)
+  const { mutate: updateTransaction, isPending: isLoading } = useUpdateTransaction(accountId, transaction.id)
+  const [category, setCategory] = useState<ReturnType<typeof useCategory>['data']>()
+  const {mutate: getCategory, data: categoryData} = useCategory(accountId)
+
+  // Populate form with transaction data when dialog opens
+  useEffect(() => {
+    if (open) {
+      setAmount(Math.abs(transaction.amount).toString())
+      setDescription(transaction.description || '')
+      setTransactionType(transaction.type)
+      setCategoryId(transaction.categoryId || '')
+      if (transaction.categoryId) {
+        getCategory(transaction.categoryId)
+      } else {
+        setCategory(undefined)
+      }
+    }
+  }, [open, transaction])
+
+  useEffect(() => {
+    if (categoryData) {
+      setCategory(categoryData)
+    }
+  }, [categoryData])
 
 
+
+  useEffect(() => {
+    if (categoryId) {
+      getCategory(categoryId)
+    } else {
+      setCategory(undefined)
+    }
+  }, [categoryId, getCategory])
 
   const filteredCategories = categories.filter((cat) => cat.domain === transactionType)
 
@@ -61,37 +95,42 @@ export function CreateTransactionDialog({
       const parsedAmount = parseFloat(amount)
       const finalAmount = transactionType === 'EXPENSE' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount)
 
-      createTransaction({
+      updateTransaction({
+        id: transaction.id,
         amount: finalAmount,
         description,
         categoryId: categoryId || undefined,
-      } as CreateTransactionDto)
+      } as UpdateTransactionDto)
 
-      // Reset form
-      setAmount('')
-      setDescription('')
-      setTransactionType(TypesTransactionCategory.EXPENSE)
-      setCategoryId('')
       setOpen(false)
     } catch (error) {
-      console.error('Error creating transaction:', error)
+      console.error('Error updating transaction:', error)
     }
   }
+  console.log('Selected category for edit:', category)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Transação
-        </Button>
+        {button || (
+          <Button variant="ghost" size="icon" className='cursor-pointer'>
+            <Edit className="w-4 h-4" />
+            <span className="sr-only">Editar Transação</span>
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Criar Nova Transação</DialogTitle>
+          <DialogTitle>Editar Transação</DialogTitle>
           <DialogDescription>
-            Adicione uma nova transação à sua conta
+            Modifique os detalhes da transação
           </DialogDescription>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className='cursor-pointer position absolute top-3 right-3 text-xl text-slate-500 hover:text-slate-700'>
+              <span className="sr-only">Fechar</span>
+              &times;
+            </Button>
+          </DialogClose>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
@@ -104,7 +143,7 @@ export function CreateTransactionDialog({
                   setCategoryId('')
                 }}
               >
-                <SelectTrigger id="transactionType">
+                <SelectTrigger id="transactionType" className='cursor-pointer'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -151,7 +190,7 @@ export function CreateTransactionDialog({
               <Label htmlFor="category">Categoria (Opcional)</Label>
               <div className="flex gap-2">
                 <Select value={categoryId} onValueChange={setCategoryId}>
-                  <SelectTrigger id="category" className="flex-1">
+                  <SelectTrigger id="category" className="flex-1 cursor-pointer">
                     <SelectValue placeholder={`Selecione uma ${transactionType === 'EXPENSE' ? 'despesa' : 'receita'}`} />
                   </SelectTrigger>
                   <SelectContent>
@@ -168,19 +207,35 @@ export function CreateTransactionDialog({
                     )}
                   </SelectContent>
                 </Select>
+                {(categoryId && category) && (
+                  <EditCategoryDialog
+                    accountId={accountId}
+                    category={category}
+                    button={
+                      <Button variant="outline" size="icon" className='cursor-pointer'>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                    }
+                  />
+                )}
                 <CreateCategoryDialog
                   defaultDomain={transactionType}
                   accountId={accountId}
+                  button={
+                    <Button variant="outline" size="sm" className='cursor-pointer'>
+                      <Plus className="w-4 h-4 mr-1" />
+                    </Button>
+                  }
                 />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" className='cursor-pointer' onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Criando...' : 'Criar'}
+            <Button type="submit" className='cursor-pointer' disabled={isLoading}>
+              {isLoading ? 'Atualizando...' : 'Atualizar'}
             </Button>
           </DialogFooter>
         </form>

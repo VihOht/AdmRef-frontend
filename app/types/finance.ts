@@ -27,6 +27,7 @@ export interface Transaction {
   type: TypesTransactionCategory
   createdAt: string
   updatedAt?: string
+  categoryId?: string
   category?: {
     id: string
     name: string

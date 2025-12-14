@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -18,67 +19,84 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select'
-import { Plus } from 'lucide-react'
+import { Edit } from 'lucide-react'
+import { useUpdateCategory } from '~/hooks/use-finance'
 import { TypesTransactionCategory } from '~/types'
-import { useCreateCategory } from '~/hooks/use-finance'
+import type { Category, UpdateCategoryDto } from '~/types'
 
-
-interface CreateCategoryDialogProps {
-  defaultDomain?: TypesTransactionCategory
+interface EditCategoryDialogProps {
+  category: Category
   accountId: string
+  button?: React.ReactNode
 }
 
-export function CreateCategoryDialog({
-  defaultDomain = TypesTransactionCategory.EXPENSE,
+export function EditCategoryDialog({
+  category,
   accountId,
-}: CreateCategoryDialogProps) {
+  button,
+}: EditCategoryDialogProps) {
+  if (!accountId) {
+    throw new Error('accountId is required to edit a category')
+  }
+
   const [open, setOpen] = useState(false)
   const [categoryName, setCategoryName] = useState('')
-  const [categoryDomain, setCategoryDomain] = useState<TypesTransactionCategory>(defaultDomain)
+  const [categoryDomain, setCategoryDomain] = useState<TypesTransactionCategory>(TypesTransactionCategory.EXPENSE)
   const [categoryDescription, setCategoryDescription] = useState('')
+  const { mutate: updateCategory, isPending: isLoading } = useUpdateCategory(accountId, category.id)
 
-  const {mutate: createCategory, isPending: isLoading} = useCreateCategory(accountId)
-
+  // Populate form with category data when dialog opens
   useEffect(() => {
-    setCategoryDomain(defaultDomain)
-  }, [defaultDomain])
+    if (open) {
+      setCategoryName(category.name)
+      setCategoryDomain(category.domain)
+      setCategoryDescription(category.description || '')
+    }
+  }, [open, category])
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!categoryName || isLoading) return
-    
+    if (!categoryName) return
+    if (isLoading) return
+
     try {
-      createCategory({
+      updateCategory({
+        id: category.id,
         name: categoryName,
         domain: categoryDomain,
         description: categoryDescription,
-      })
+      } as UpdateCategoryDto)
 
-      // Reset form
-      setCategoryName('')
-      setCategoryDomain(defaultDomain)
-      setCategoryDescription('')
       setOpen(false)
-   
     } catch (error) {
-      console.error('Error creating category:', error)
+      console.error('Error updating category:', error)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="icon">
-          <Plus className="w-4 h-4" />
+        {button || (
+        <Button variant="ghost" size="icon" className="text-blue-500 hover:text-blue-700 cursor-pointer">
+          <Edit className="w-4 h-4" />
+          <span className="sr-only">Editar Categoria</span>
         </Button>
+        )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Criar Nova Categoria</DialogTitle>
+          <DialogTitle>Editar Categoria</DialogTitle>
           <DialogDescription>
-            Adicione uma nova categoria para organizar suas transações
+            Modifique os detalhes da categoria
           </DialogDescription>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className='cursor-pointer position absolute top-3 right-3 text-xl text-slate-500 hover:text-slate-700'>
+              <span className="sr-only">Fechar</span>
+              &times;
+            </Button>
+          </DialogClose>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
@@ -98,7 +116,7 @@ export function CreateCategoryDialog({
                 value={categoryDomain} 
                 onValueChange={(value) => setCategoryDomain(value as TypesTransactionCategory)}
               >
-                <SelectTrigger id="categoryDomain">
+                <SelectTrigger id="categoryDomain" className='cursor-pointer'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -122,14 +140,16 @@ export function CreateCategoryDialog({
               type="button" 
               variant="outline" 
               onClick={() => setOpen(false)}
+              className='cursor-pointer'
             >
               Cancelar
             </Button>
             <Button 
               type="submit" 
               disabled={isLoading || !categoryName}
+              className='cursor-pointer'
             >
-              {isLoading ? 'Criando...' : 'Criar Categoria'}
+              {isLoading ? 'Atualizando...' : 'Atualizar'}
             </Button>
           </DialogFooter>
         </form>

@@ -153,12 +153,11 @@ export function useCategories(accountId: string) {
   })
 }
 
-export function useCategory(accountId: string, categoryId: string) {
-  return useQuery({
-    queryKey: QUERY_KEYS.category(accountId, categoryId),
-    queryFn: () => financeService.getAccountCategory(accountId, categoryId),
-    enabled: !!accountId && !!categoryId,
-  })
+export function useCategory(accountId: string) {
+  return useMutation({
+    mutationFn: (categoryId: string) => financeService.getAccountCategory(accountId, categoryId),
+  },
+)
 }
 
 export function useCreateCategory(accountId: string) {
